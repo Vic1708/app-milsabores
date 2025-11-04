@@ -10,22 +10,36 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.shadow
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.platform.LocalContext
+import androidx.navigation.NavController
 import com.example.pasteleriamilsabores.model.Producto
 import com.example.pasteleriamilsabores.viewmodel.CartViewModel
 import com.example.pasteleriamilsabores.ui.theme.*
+import com.example.pasteleriamilsabores.viewmodel.AuthViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CartScreen(viewModel: CartViewModel = viewModel()) {
-    val cartItems by viewModel.cartItems.collectAsState()
+fun CartScreen(navController: NavController, viewModelParam: CartViewModel? = null) {
+
+    val context = LocalContext.current
+    val viewModel: CartViewModel = viewModelParam ?: androidx.lifecycle.viewmodel.compose.viewModel(
+        factory = com.example.pasteleriamilsabores.viewmodel.CartViewModel.Factory(context.applicationContext as android.app.Application)
+    )
+
+    // 🔹 Ahora usamos el carrito persistente desde Room
+    val cartItems by viewModel.cartAsProducto.collectAsState()
     val total = viewModel.calcularTotal()
+
+    // Obtener estado de sesión
+    val authVm: AuthViewModel = viewModel(factory = AuthViewModel.Factory(context))
+    val loggedIn by authVm.sesionActiva.collectAsState(initial = false)
 
     Scaffold(
         containerColor = CremaClaro,
@@ -54,10 +68,12 @@ fun CartScreen(viewModel: CartViewModel = viewModel()) {
             }
         }
     ) { padding ->
-        Column(Modifier
-            .fillMaxSize()
-            .padding(padding)
-            .padding(16.dp),
+
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (cartItems.isEmpty()) {
@@ -73,6 +89,7 @@ fun CartScreen(viewModel: CartViewModel = viewModel()) {
                     )
                 }
             } else {
+                // 📦 Lista de productos en el carrito
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(cartItems) { producto: Producto ->
                         Card(
@@ -110,27 +127,36 @@ fun CartScreen(viewModel: CartViewModel = viewModel()) {
                                         contentColor = NaranjaOscuro
                                     )
                                 ) {
-                                    Icon(imageVector = Icons.Default.Delete, contentDescription = "Eliminar")
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Eliminar"
+                                    )
                                 }
                             }
                         }
                     }
                 }
+
                 Spacer(modifier = Modifier.height(8.dp))
+
+                // 🧾 Total
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = GrisSuave)
                 ) {
                     Text(
-                        "Total: $${"%.2f".format(total.toDouble())}",
+                        "Total: $${"%.2f".format(total)}",
                         modifier = Modifier.padding(16.dp),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = Chocolate
                     )
                 }
+
                 Spacer(modifier = Modifier.height(8.dp))
+
+                // 🧭 Botones de acción
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
                         onClick = { viewModel.clearCart() },
@@ -142,8 +168,15 @@ fun CartScreen(viewModel: CartViewModel = viewModel()) {
                     ) {
                         Text("Vaciar", fontWeight = FontWeight.Bold)
                     }
+
                     Button(
-                        onClick = { /* navegación a checkout */ },
+                        onClick = {
+                            if (loggedIn) {
+                                navController.navigate("checkout")
+                            } else {
+                                navController.navigate("auth/login")
+                            }
+                        },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(

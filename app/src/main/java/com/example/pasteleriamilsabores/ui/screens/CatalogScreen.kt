@@ -2,12 +2,19 @@ package com.example.pasteleriamilsabores.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.runtime.getValue
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -15,26 +22,53 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
 import com.example.pasteleriamilsabores.R
+import com.example.pasteleriamilsabores.viewmodel.ProductsViewModel
 import com.example.pasteleriamilsabores.model.Producto
 import com.example.pasteleriamilsabores.viewmodel.CartViewModel
 import com.example.pasteleriamilsabores.ui.theme.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import android.util.Log
+import androidx.compose.foundation.verticalScroll
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CatalogScreen(cartViewModel: CartViewModel = viewModel()) {
+fun CatalogScreen(navController: NavHostController, cartViewModelParam: CartViewModel? = null) {
+    // Crear CartViewModel con Factory si no fue inyectado
+    val context = LocalContext.current
+    val cartViewModel: CartViewModel = cartViewModelParam ?: run {
+        val factory = com.example.pasteleriamilsabores.viewmodel.CartViewModel.Factory(context.applicationContext as android.app.Application)
+        androidx.lifecycle.viewmodel.compose.viewModel(factory = factory)
+    }
+
     var searchText by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("Todas las categorías") }
     var expandedDropdown by remember { mutableStateOf(false) }
+
+    // Usar ProductsViewModel para exponer productos desde Room y categorías
+    val productsVm: ProductsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+        factory = com.example.pasteleriamilsabores.viewmodel.ProductsViewModel.Factory(context.applicationContext as android.app.Application)
+    )
+
+    val productosList by productsVm.productos.collectAsState()
+    // Calcular categorías a partir de la lista actual de productos para reactividad
+    val categories by remember(productosList) {
+        derivedStateOf {
+            val cats = productosList.map { it.categoria }.filterNotNull().distinct().sorted()
+            listOf("Todas las categorías") + cats
+        }
+    }
+
+    val productosMapped = remember(productosList) { productosList }
 
     Scaffold(
         containerColor = BlancoPuro,
@@ -60,7 +94,8 @@ fun CatalogScreen(cartViewModel: CartViewModel = viewModel()) {
                     )
 
                     Image(
-                        painter = painterResource(id = R.drawable.torta_chocolate),
+                        // Usamos la imagen `brownie` para el logo según la petición
+                        painter = painterResource(id = R.drawable.brownie),
                         contentDescription = "Logo",
                         modifier = Modifier
                             .size(48.dp)
@@ -95,70 +130,109 @@ fun CatalogScreen(cartViewModel: CartViewModel = viewModel()) {
             }
         }
     ) { padding ->
-        val productos = listOf(
-            Producto(1, "Torta de Chocolate", "Delicioso postre artesanal con ingredientes naturales.", 12990, R.drawable.torta_chocolate),
-            Producto(2, "Kuchen de Manzana", "Delicioso postre artesanal con ingredientes naturales.", 10990, R.drawable.kuchen_manzana),
-            Producto(3, "Pie de Limón", "Delicioso postre artesanal con ingredientes naturales.", 9990, R.drawable.pie_limon)
-        )
+        // Filtrar la lista mapeada por categoría y búsqueda
+        val productos = remember(searchText, selectedCategory, productosMapped) {
+            val q = searchText.trim().lowercase()
+            productosMapped.filter { p ->
+                val matchesCategory = (selectedCategory == "Todas las categorías") || p.categoria == selectedCategory
+                val matchesQuery = q.isEmpty() || p.nombre.lowercase().contains(q) || p.code.lowercase().contains(q)
+                matchesCategory && matchesQuery
+            }
+        }
 
-        LazyColumn(
+        // Debug visual: mostrar cuántos productos encontró el filtro
+        val productosCount = productos.size
+        LaunchedEffect(productosCount) {
+            println("[CatalogScreen] productos encontrados: $productosCount, filtro='$selectedCategory', query='$searchText' (desde DB? ${productosList.isNotEmpty()})")
+        }
+
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .verticalScroll(rememberScrollState()), // 👈 necesario para hacerla desplazable
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
-            // Banner carousel
-            item {
-                BannerCarousel()
+            // Si no hay productos, mostrar mensaje informativo
+            if (productos.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("No se encontraron productos.", color = MarronSuave)
+                        Spacer(Modifier.height(8.dp))
+                        Text("Revisa los filtros o la base de datos.", color = MarronSuave)
+                        Spacer(Modifier.height(12.dp))
+                        Text("Debug: productos encontrados = $productosCount", color = MarronSuave)
+                    }
+                }
             }
 
-            // Categorías circulares
-            item {
-                CategoriesSection()
-            }
+            // Banner carousel
+            BannerCarousel()
+
+            // Categorías circulares (ahora horizontalmente desplazables)
+            CategoriesSection(
+                categories = categories,
+                selected = selectedCategory,
+                onSelect = { selectedCategory = it }
+            )
 
             // Dropdown de filtro de categorías
-            item {
-                CategoryFilterDropdown(
-                    selectedCategory = selectedCategory,
-                    expanded = expandedDropdown,
-                    onExpandChange = { expandedDropdown = it },
-                    onCategorySelect = {
-                        selectedCategory = it
-                        expandedDropdown = false
-                    }
-                )
-            }
+            CategoryFilterDropdown(
+                categories = categories,
+                selectedCategory = selectedCategory,
+                expanded = expandedDropdown,
+                onExpandChange = { expandedDropdown = it },
+                onCategorySelect = {
+                    selectedCategory = it
+                    expandedDropdown = false
+                }
+            )
 
             // Sección de descuentos
-            item {
-                DiscountSection()
-            }
+            DiscountSection()
 
             // Título de productos
-            item {
-                Text(
-                    "Categoría Destacada",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Chocolate,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
+            Text(
+                "Categoría Destacada",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = Chocolate,
+                modifier = Modifier.padding(16.dp)
+            )
 
-            // Productos en grid
-            items(productos.size) { index ->
-                val product = productos[index]
+            // Productos en grid (lista)
+            productos.forEach { product ->
                 ProductCard(
                     name = product.nombre,
                     description = product.descripcion,
                     price = "${'$'}${product.precio}",
-                    imageRes = product.imagen
+                    imageRes = product.imagen,
+                    onAdd = {
+                        // Acción al agregar: usar el viewModel pasado
+                        cartViewModel.addToCart(
+                            Producto(
+                                id = product.id,
+                                code = product.code,
+                                nombre = product.nombre,
+                                descripcion = product.descripcion,
+                                precio = product.precio,
+                                imagen = product.imagen,
+                                categoria = product.categoria
+                            )
+                        )
+                    }
                 ) {
-                    cartViewModel.addToCart(product)
+                    // onClick (detalle): navegar a la pantalla de producto
+                    navController.navigate("producto/${product.id}")
                 }
             }
         }
+
     }
 }
 
@@ -180,46 +254,9 @@ fun BannerCarousel() {
             .height(250.dp)
             .background(NaranjaSuave)
     ) {
-        // Simulación de banner
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Surface(
-                modifier = Modifier.size(80.dp),
-                shape = CircleShape,
-                color = BlancoPuro
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        "🍰",
-                        fontSize = 40.sp
-                    )
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-            Text(
-                "BODAS",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = BlancoPuro
-            )
-            Text(
-                "FESTIVO",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = BlancoPuro
-            )
-            Text(
-                "CUMPLEAÑOS",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = BlancoPuro
-            )
-        }
+        // Usamos la función `AnimatedSlide` para renderizar dinámicamente el contenido del banner
+        // AnimatedSlide sincroniza la animación de la imagen (brownie.png) y los textos
+        AnimatedSlide(currentPage)
 
         // Indicador de página
         Row(
@@ -229,12 +266,16 @@ fun BannerCarousel() {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             repeat(pageCount) { index ->
+                // Animación por indicador: tamaño y color
+                val targetSize by animateDpAsState(targetValue = if (index == currentPage) 12.dp else 8.dp, animationSpec = tween(300))
+                val targetColor by animateColorAsState(targetValue = if (index == currentPage) BlancoPuro else BlancoPuro.copy(alpha = 0.5f), animationSpec = tween(300))
+
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
+                        .size(targetSize)
                         .background(
-                            if (index == currentPage) BlancoPuro else BlancoPuro.copy(alpha = 0.5f),
-                            CircleShape
+                            color = targetColor,
+                            shape = CircleShape
                         )
                 )
             }
@@ -243,73 +284,71 @@ fun BannerCarousel() {
 }
 
 @Composable
-fun CategoriesSection() {
-    val categories = listOf(
-        "Alcohol/\nCerveza" to "🍺",
-        "Boda" to "💒",
-        "Niña" to "👧",
-        "Niño" to "👦"
+fun CategoriesSection(categories: List<String>, selected: String, onSelect: (String) -> Unit) {
+    // Mapear emojis básicos según palabra clave (puedes adaptar a recursos icónicos)
+    val emojiFor = mapOf(
+        "Tortas Cuadradas" to "🎂",
+        "Tortas Circulares" to "🍰",
+        "Postres Individuales" to "🧁",
+        "Vegana" to "🥦",
+        "Sin Gluten" to "🌾",
+        "Todas las categorías" to "🧁"
     )
 
-    Row(
+    LazyRow(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 20.dp, horizontal = 16.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly
+            .padding(vertical = 12.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        categories.forEach { (name, emoji) ->
-            CategoryItem(name, emoji)
+        items(categories) { name ->
+            val emoji = emojiFor[name] ?: "🧁"
+            CategoryItem(name = name, emoji = emoji, selected = (name == selected), onClick = { onSelect(name) })
         }
+        item { Spacer(modifier = Modifier.width(24.dp)) }
     }
 }
 
 @Composable
-fun CategoryItem(name: String, emoji: String) {
+fun CategoryItem(name: String, emoji: String, selected: Boolean = false, onClick: () -> Unit = {}) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .width(80.dp)
-            .clickable { /* Navegar a categoría */ }
+            .width(92.dp)
+            .clickable { onClick() }
     ) {
         Surface(
-            modifier = Modifier.size(64.dp),
+            modifier = Modifier.size(68.dp),
             shape = CircleShape,
-            color = BlancoPuro,
-            shadowElevation = 6.dp,
-            border = androidx.compose.foundation.BorderStroke(2.dp, GrisSuave)
+            color = if (selected) VerdePastel else BlancoPuro,
+            shadowElevation = if (selected) 8.dp else 4.dp,
+            border = BorderStroke(2.dp, if (selected) VerdeOscuro else GrisSuave)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Text(emoji, fontSize = 32.sp)
+                Text(emoji, fontSize = 28.sp)
             }
         }
         Spacer(Modifier.height(8.dp))
         Text(
             name,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             textAlign = TextAlign.Center,
             color = Chocolate,
             maxLines = 2,
-            lineHeight = 12.sp
+            lineHeight = 13.sp
         )
     }
 }
 
 @Composable
 fun CategoryFilterDropdown(
+    categories: List<String>,
     selectedCategory: String,
     expanded: Boolean,
     onExpandChange: (Boolean) -> Unit,
     onCategorySelect: (String) -> Unit
 ) {
-    val categories = listOf(
-        "Todas las categorías",
-        "Tortas Cuadradas",
-        "Tortas Circulares",
-        "Postres Individuales",
-        "Vegana",
-        "Sin Gluten"
-    )
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -321,7 +360,7 @@ fun CategoryFilterDropdown(
                 .clickable { onExpandChange(!expanded) },
             shape = RoundedCornerShape(8.dp),
             colors = CardDefaults.cardColors(containerColor = BlancoPuro),
-            border = androidx.compose.foundation.BorderStroke(1.dp, GrisSuave)
+            border = BorderStroke(1.dp, GrisSuave)
         ) {
             Row(
                 modifier = Modifier
@@ -346,7 +385,6 @@ fun CategoryFilterDropdown(
                 )
             }
         }
-
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { onExpandChange(false) },
@@ -354,6 +392,7 @@ fun CategoryFilterDropdown(
                 .fillMaxWidth(0.9f)
                 .background(BlancoPuro)
         ) {
+            // Usamos las categorías provistas por el caller (ProductsViewModel)
             categories.forEach { category ->
                 DropdownMenuItem(
                     text = {
@@ -406,7 +445,7 @@ fun DiscountSection() {
 }
 
 @Composable
-fun ProductCard(name: String, description: String, price: String, imageRes: Int, onAdd: () -> Unit) {
+fun ProductCard(name: String, description: String, price: String, imageRes: Int, onAdd: () -> Unit, onClick: () -> Unit = {}) {
     var visible by remember { mutableStateOf(false) }
     var buttonPressed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -433,7 +472,8 @@ fun ProductCard(name: String, description: String, price: String, imageRes: Int,
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
+                .padding(8.dp)
+                .clickable { onClick() },
             shape = RoundedCornerShape(16.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
             colors = CardDefaults.cardColors(containerColor = BlancoPuro)

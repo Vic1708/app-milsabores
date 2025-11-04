@@ -14,34 +14,57 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pasteleriamilsabores.viewmodel.CartViewModel
 import com.example.pasteleriamilsabores.ui.theme.*
+import androidx.compose.ui.platform.LocalContext
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
-fun CheckoutScreen(viewModel: CartViewModel = viewModel()) {
+fun CheckoutScreen(viewModelParam: CartViewModel? = null) {
+    val context = LocalContext.current
+    val viewModel: CartViewModel = viewModelParam ?: androidx.lifecycle.viewmodel.compose.viewModel(
+        factory = com.example.pasteleriamilsabores.viewmodel.CartViewModel.Factory(context.applicationContext as android.app.Application)
+    )
+
     var direccion by remember { mutableStateOf("") }
     var comuna by remember { mutableStateOf("") }
     var fechaEntrega by remember { mutableStateOf("") }
     var telefono by remember { mutableStateOf("") }
+
     var mensaje by remember { mutableStateOf("") }
     var mensajeTipo by remember { mutableStateOf("") }
 
     val total = viewModel.calcularTotal()
 
+    // 🔹 Validación del formulario
     fun validarFormulario() {
-        if (direccion.isBlank() || comuna.isBlank() || fechaEntrega.isBlank() || telefono.isBlank()) {
-            mensaje = "⚠️ Debes completar todos los campos."
-            mensajeTipo = "error"
-            return
+        when {
+            direccion.isBlank() || comuna.isBlank() || fechaEntrega.isBlank() || telefono.isBlank() -> {
+                mensaje = "⚠️ Debes completar todos los campos."
+                mensajeTipo = "error"
+            }
+
+            !fechaEntrega.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) -> {
+                mensaje = "❌ Formato de fecha inválido (usa AAAA-MM-DD)."
+                mensajeTipo = "error"
+            }
+
+            telefono.length < 8 -> {
+                mensaje = "📞 El teléfono ingresado no es válido."
+                mensajeTipo = "error"
+            }
+
+            else -> {
+                // ✅ Pedido confirmado
+                mensaje = "✅ Pedido confirmado. Total a pagar: $${"%.2f".format(total)}"
+                mensajeTipo = "success"
+
+                // Limpieza del carrito y formulario
+                viewModel.clearCart()
+                direccion = ""
+                comuna = ""
+                fechaEntrega = ""
+                telefono = ""
+            }
         }
-        val fechaRegex = Regex("\\d{4}-\\d{2}-\\d{2}")
-        if (!fechaEntrega.matches(fechaRegex)) {
-            mensaje = "❌ Formato de fecha inválido (usa AAAA-MM-DD)."
-            mensajeTipo = "error"
-            return
-        }
-        mensaje = "✅ Pedido confirmado. Total a pagar: $${"%.2f".format(total.toDouble())}"
-        mensajeTipo = "success"
-        viewModel.clearCart()
     }
 
     Scaffold(
@@ -86,6 +109,7 @@ fun CheckoutScreen(viewModel: CartViewModel = viewModel()) {
                 color = Chocolate
             )
 
+            // 🏠 Dirección
             OutlinedTextField(
                 value = direccion,
                 onValueChange = { direccion = it },
@@ -99,6 +123,7 @@ fun CheckoutScreen(viewModel: CartViewModel = viewModel()) {
                 )
             )
 
+            // 🏘️ Comuna
             OutlinedTextField(
                 value = comuna,
                 onValueChange = { comuna = it },
@@ -112,6 +137,7 @@ fun CheckoutScreen(viewModel: CartViewModel = viewModel()) {
                 )
             )
 
+            // 📅 Fecha de entrega
             OutlinedTextField(
                 value = fechaEntrega,
                 onValueChange = { fechaEntrega = it },
@@ -125,6 +151,7 @@ fun CheckoutScreen(viewModel: CartViewModel = viewModel()) {
                 )
             )
 
+            // ☎️ Teléfono
             OutlinedTextField(
                 value = telefono,
                 onValueChange = { telefono = it },
@@ -140,6 +167,7 @@ fun CheckoutScreen(viewModel: CartViewModel = viewModel()) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            // 🧾 Confirmar pedido
             Button(
                 onClick = { validarFormulario() },
                 modifier = Modifier.fillMaxWidth(),
@@ -154,6 +182,7 @@ fun CheckoutScreen(viewModel: CartViewModel = viewModel()) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            // 💬 Mensaje animado
             AnimatedVisibility(
                 visible = mensaje.isNotEmpty(),
                 enter = slideInVertically() + fadeIn(),
@@ -163,7 +192,10 @@ fun CheckoutScreen(viewModel: CartViewModel = viewModel()) {
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (mensajeTipo == "success") GrisSuave else NaranjaOscuro.copy(alpha = 0.1f)
+                        containerColor = if (mensajeTipo == "success")
+                            GrisSuave.copy(alpha = 0.4f)
+                        else
+                            NaranjaOscuro.copy(alpha = 0.1f)
                     )
                 ) {
                     Text(
