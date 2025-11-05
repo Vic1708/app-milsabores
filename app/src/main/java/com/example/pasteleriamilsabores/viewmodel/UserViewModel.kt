@@ -33,15 +33,23 @@ class UserViewModel(application: Application) : AndroidViewModel(application) {
         password: String,
         confirmPassword: String,
         fechaNacimiento: String,
-        direccion: String
+        direccion: String,
+        rut: String,
+        telefono: String
     ) {
         // Validaciones del lado del ViewModel
-        if (nombre.isBlank() || email.isBlank() || password.isBlank() || confirmPassword.isBlank()) {
+        if (nombre.isBlank() || email.isBlank() || password.isBlank() || confirmPassword.isBlank() || rut.isBlank()) {
             _registerResult.value = RegisterResult.Error("Por favor completa todos los campos obligatorios")
             return
         }
 
-        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+        // nombre completo: debe tener más de 3 caracteres
+        if (nombre.trim().length <= 3) {
+            _registerResult.value = RegisterResult.Error("El nombre debe tener más de 3 caracteres")
+            return
+        }
+
+        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches() || !email.contains("@")) {
             _registerResult.value = RegisterResult.Error("Correo no válido")
             return
         }
@@ -56,6 +64,18 @@ class UserViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        // RUT: exactamente 9 dígitos
+        if (!rut.matches(Regex("^\\d{9}$"))) {
+            _registerResult.value = RegisterResult.Error("RUT inválido: debe contener 9 dígitos sin puntos ni guion")
+            return
+        }
+
+        // Teléfono opcional: si se entrega, validar que sean dígitos y longitud razonable
+        if (telefono.isNotBlank() && !telefono.matches(Regex("^\\d{6,15}$"))) {
+            _registerResult.value = RegisterResult.Error("Teléfono inválido")
+            return
+        }
+
         // Si valida, guardar en Room (suspend en coroutine)
         viewModelScope.launch {
             val user = UserEntity(
@@ -63,7 +83,9 @@ class UserViewModel(application: Application) : AndroidViewModel(application) {
                 email = email,
                 password = password,
                 fechaNacimiento = fechaNacimiento,
-                direccion = direccion
+                direccion = direccion,
+                telefono = telefono,
+                rut = rut
             )
 
             val id = repository.register(user)
@@ -75,4 +97,3 @@ class UserViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
-

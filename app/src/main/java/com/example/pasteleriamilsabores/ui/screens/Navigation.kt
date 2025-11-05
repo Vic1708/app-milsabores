@@ -1,6 +1,7 @@
 package com.example.pasteleriamilsabores.ui.screens
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -32,6 +33,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pasteleriamilsabores.viewmodel.AuthViewModel
+import com.example.pasteleriamilsabores.viewmodel.CartViewModel
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import android.graphics.BitmapFactory
@@ -39,6 +41,21 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.graphics.Color
+import com.example.pasteleriamilsabores.ui.theme.*
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
     object Catalog : Screen("catalog", "Inicio", Icons.Default.Home)
@@ -131,6 +148,13 @@ fun BottomNavigationBar(navController: NavHostController, authVm: AuthViewModel)
     val avatar by authVm.avatar.collectAsState(initial = null)
     val loggedIn by authVm.sesionActiva.collectAsState(initial = false)
 
+    // Obtener viewmodel del carrito para el badge
+    val cartVm: CartViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+        factory = CartViewModel.Factory(context.applicationContext as android.app.Application)
+    )
+    val cartEntities by cartVm.cartItems.collectAsState()
+    val itemCount by remember(cartEntities) { derivedStateOf { cartEntities.sumOf { it.quantity } } }
+
     NavigationBar {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentDestination = navBackStackEntry?.destination
@@ -161,6 +185,19 @@ fun BottomNavigationBar(navController: NavHostController, authVm: AuthViewModel)
                             Image(bitmap = bmp.asImageBitmap(), contentDescription = "Avatar", modifier = Modifier.size(28.dp).clip(CircleShape))
                         } else {
                             Icon(screen.icon, contentDescription = screen.label)
+                        }
+                    } else if (screen is Screen.Cart) {
+                        // Icono del carrito con badge de cantidad encima
+                        Box(modifier = Modifier.size(28.dp), contentAlignment = Alignment.TopEnd) {
+                            Icon(screen.icon, contentDescription = screen.label)
+                            if (itemCount > 0) {
+                                Box(modifier = Modifier
+                                    .offset(x = 6.dp, y = (-6).dp)
+                                    .size(16.dp)
+                                    .background(NaranjaOscuro, shape = CircleShape), contentAlignment = Alignment.Center) {
+                                    Text(itemCount.toString(), color = BlancoPuro, fontSize = 10.sp)
+                                }
+                            }
                         }
                     } else {
                         Icon(screen.icon, contentDescription = screen.label)

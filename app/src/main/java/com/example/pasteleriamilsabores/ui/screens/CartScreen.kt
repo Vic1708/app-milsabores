@@ -1,15 +1,20 @@
 package com.example.pasteleriamilsabores.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -29,16 +34,25 @@ import com.example.pasteleriamilsabores.viewmodel.AuthViewModel
 fun CartScreen(navController: NavController, viewModelParam: CartViewModel? = null) {
 
     val context = LocalContext.current
-    val viewModel: CartViewModel = viewModelParam ?: androidx.lifecycle.viewmodel.compose.viewModel(
+    val cartVm: CartViewModel = viewModelParam ?: androidx.lifecycle.viewmodel.compose.viewModel(
         factory = com.example.pasteleriamilsabores.viewmodel.CartViewModel.Factory(context.applicationContext as android.app.Application)
     )
 
-    // 🔹 Ahora usamos el carrito persistente desde Room
-    val cartItems by viewModel.cartAsProducto.collectAsState()
-    val total = viewModel.calcularTotal()
+    // Recolectar entidades del carrito (tiene quantity)
+    val cartEntities by cartVm.cartItems.collectAsState()
+    // Recolectar lista UI-friendly (Producto) para mostrar
+    val cartItems by cartVm.cartAsProducto.collectAsState()
+
+    // Calcular total reactivamente a partir de entidades (precio * cantidad)
+    val total by remember(cartEntities) { derivedStateOf { cartEntities.sumOf { it.precio * it.quantity } } }
+
+    // Calcular cantidad total de unidades en el carrito
+    val itemCount by remember(cartEntities) { derivedStateOf { cartEntities.sumOf { it.quantity } } }
 
     // Obtener estado de sesión
-    val authVm: AuthViewModel = viewModel(factory = AuthViewModel.Factory(context))
+    val authVm: AuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+        factory = AuthViewModel.Factory(context)
+    )
     val loggedIn by authVm.sesionActiva.collectAsState(initial = false)
 
     Scaffold(
@@ -53,12 +67,24 @@ fun CartScreen(navController: NavController, viewModelParam: CartViewModel? = nu
             ) {
                 CenterAlignedTopAppBar(
                     title = {
-                        Text(
-                            "Carrito 🛒",
-                            color = BlancoPuro,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Mostrar solo el icono del carrito en la AppBar (sin badges)
+                            Icon(
+                                imageVector = Icons.Filled.ShoppingCart,
+                                contentDescription = "Carrito",
+                                tint = BlancoPuro,
+                                modifier = Modifier.size(40.dp)
+                            )
+
+                            Spacer(Modifier.width(8.dp))
+
+                            Text(
+                                "Carrito",
+                                color = BlancoPuro,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp
+                            )
+                        }
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = VerdePastel,
@@ -122,7 +148,7 @@ fun CartScreen(navController: NavController, viewModelParam: CartViewModel? = nu
                                     )
                                 }
                                 IconButton(
-                                    onClick = { viewModel.removeFromCart(producto) },
+                                    onClick = { cartVm.removeFromCart(producto) },
                                     colors = IconButtonDefaults.iconButtonColors(
                                         contentColor = NaranjaOscuro
                                     )
@@ -159,7 +185,7 @@ fun CartScreen(navController: NavController, viewModelParam: CartViewModel? = nu
                 // 🧭 Botones de acción
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
-                        onClick = { viewModel.clearCart() },
+                        onClick = { cartVm.clearCart() },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
