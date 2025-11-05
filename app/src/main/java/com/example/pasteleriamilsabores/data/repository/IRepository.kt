@@ -1,6 +1,7 @@
 package com.example.pasteleriamilsabores.data.repository
 
 import com.example.pasteleriamilsabores.data.local.CartItemEntity
+import com.example.pasteleriamilsabores.data.local.OrderEntity
 import com.example.pasteleriamilsabores.data.local.ProductEntity
 import com.example.pasteleriamilsabores.data.local.UserEntity
 import kotlinx.coroutines.flow.Flow
@@ -33,5 +34,13 @@ interface IRepository {
     suspend fun actualizarCartItem(item: CartItemEntity)
     suspend fun eliminarCartItem(item: CartItemEntity)
     suspend fun limpiarCarrito()
+
+    // Órdenes
+    suspend fun crearOrden(orden: OrderEntity): Long
+    suspend fun obtenerOrdenPorNumero(orderNumber: String): OrderEntity?
+    suspend fun obtenerOrdenReciente(): OrderEntity?
+    fun obtenerOrdenRecienteFlow(): Flow<OrderEntity?>
+    suspend fun actualizarOrden(orden: OrderEntity)
+    fun obtenerTodasLasOrdenes(): Flow<List<OrderEntity>>
 }
 

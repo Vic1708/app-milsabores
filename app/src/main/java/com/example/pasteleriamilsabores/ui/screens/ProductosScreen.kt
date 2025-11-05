@@ -7,7 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -55,8 +55,7 @@ fun ProductosScreen(navController: NavController, productId: Int?) {
                 title = { Text(product?.nombre ?: "Producto", color = Chocolate) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        // Volver a usar Icons.Filled.ArrowBack para compatibilidad y evitar import no soportado
-                        Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Atrás")
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = CremaClaro)

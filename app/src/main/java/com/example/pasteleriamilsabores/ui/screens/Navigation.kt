@@ -128,7 +128,7 @@ fun AppNavigation() {
             }
 
             composable(Screen.Cart.route) { CartScreen(navController) }
-            composable(Screen.Checkout.route) { CheckoutScreen() }
+            composable(Screen.Checkout.route) { CheckoutScreen(navController) }
             composable(Screen.Tracking.route) { TrackingScreen() }
         }
     }

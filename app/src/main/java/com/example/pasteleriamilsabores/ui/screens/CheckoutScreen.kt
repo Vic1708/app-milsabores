@@ -12,13 +12,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import com.example.pasteleriamilsabores.viewmodel.CartViewModel
 import com.example.pasteleriamilsabores.ui.theme.*
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
-fun CheckoutScreen(viewModelParam: CartViewModel? = null) {
+fun CheckoutScreen(navController: NavController, viewModelParam: CartViewModel? = null) {
     val context = LocalContext.current
     val viewModel: CartViewModel = viewModelParam ?: androidx.lifecycle.viewmodel.compose.viewModel(
         factory = com.example.pasteleriamilsabores.viewmodel.CartViewModel.Factory(context.applicationContext as android.app.Application)
@@ -31,8 +39,11 @@ fun CheckoutScreen(viewModelParam: CartViewModel? = null) {
 
     var mensaje by remember { mutableStateOf("") }
     var mensajeTipo by remember { mutableStateOf("") }
+    var isProcessing by remember { mutableStateOf(false) }
+    var pedidoNumber by remember { mutableStateOf("") }
 
     val total = viewModel.calcularTotal()
+    val scope = rememberCoroutineScope()
 
     // 🔹 Validación del formulario
     fun validarFormulario() {
@@ -42,8 +53,13 @@ fun CheckoutScreen(viewModelParam: CartViewModel? = null) {
                 mensajeTipo = "error"
             }
 
-            !fechaEntrega.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) -> {
-                mensaje = "❌ Formato de fecha inválido (usa AAAA-MM-DD)."
+            !fechaEntrega.matches(Regex("^\\d{2}/\\d{2}/\\d{4}$")) -> {
+                mensaje = "❌ Formato de fecha inválido (usa DD/MM/AAAA)."
+                mensajeTipo = "error"
+            }
+
+            !validarFechaEntrega(fechaEntrega) -> {
+                mensaje = "❌ La fecha debe ser posterior a hoy y no exceder los 20 días."
                 mensajeTipo = "error"
             }
 
@@ -53,16 +69,46 @@ fun CheckoutScreen(viewModelParam: CartViewModel? = null) {
             }
 
             else -> {
-                // ✅ Pedido confirmado
-                mensaje = "✅ Pedido confirmado. Total a pagar: $${"%.2f".format(total)}"
-                mensajeTipo = "success"
+                // 📦 Crear pedido
+                isProcessing = true
+                scope.launch {
+                    try {
+                        val order = viewModel.createOrder(
+                            direccion = direccion,
+                            comuna = comuna,
+                            fechaEntrega = fechaEntrega,
+                            telefono = telefono
+                        )
 
-                // Limpieza del carrito y formulario
-                viewModel.clearCart()
-                direccion = ""
-                comuna = ""
-                fechaEntrega = ""
-                telefono = ""
+                        if (order != null) {
+                            pedidoNumber = order.orderNumber
+                            mensaje = "✅ Pedido ${order.orderNumber} confirmado. Total: $${"%.2f".format(total)}"
+                            mensajeTipo = "success"
+
+                            // Limpiar carrito y formulario
+                            viewModel.clearCart()
+                            direccion = ""
+                            comuna = ""
+                            fechaEntrega = ""
+                            telefono = ""
+
+                            // Navegar a Seguimiento después de 1.5 segundos
+                            delay(1500)
+                            android.util.Log.d("CheckoutScreen", "Navegando a tracking...")
+                            navController.navigate("tracking") {
+                                popUpTo("checkout") { inclusive = true }
+                            }
+                        } else {
+                            mensaje = "❌ Error al crear el pedido."
+                            mensajeTipo = "error"
+                        }
+                    } catch (e: Exception) {
+                        mensaje = "❌ Error: ${e.message}"
+                        mensajeTipo = "error"
+                    } finally {
+                        isProcessing = false
+                    }
+                }
             }
         }
     }
@@ -141,7 +187,7 @@ fun CheckoutScreen(viewModelParam: CartViewModel? = null) {
             OutlinedTextField(
                 value = fechaEntrega,
                 onValueChange = { fechaEntrega = it },
-                label = { Text("Fecha de entrega (AAAA-MM-DD)") },
+                label = { Text("Fecha de entrega (DD/MM/AAAA)") },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -172,12 +218,27 @@ fun CheckoutScreen(viewModelParam: CartViewModel? = null) {
                 onClick = { validarFormulario() },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
+                enabled = !isProcessing,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = NaranjaSuave,
-                    contentColor = BlancoPuro
+                    contentColor = BlancoPuro,
+                    disabledContainerColor = NaranjaSuave.copy(alpha = 0.6f)
                 )
             ) {
-                Text("Confirmar pedido", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                if (isProcessing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .padding(end = 8.dp),
+                        color = BlancoPuro,
+                        strokeWidth = 2.dp
+                    )
+                }
+                Text(
+                    if (isProcessing) "Procesando..." else "Confirmar pedido",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -208,5 +269,39 @@ fun CheckoutScreen(viewModelParam: CartViewModel? = null) {
                 }
             }
         }
+    }
+}
+
+private fun validarFechaEntrega(fechaStr: String): Boolean {
+    val formato = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+    formato.isLenient = false
+    return try {
+        val fechaEntregaDate = formato.parse(fechaStr) ?: return false
+
+        // --- HOY (inicio del día) ---
+        val hoy = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        // --- LÍMITE (20 días desde hoy) ---
+        val maximo = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, 20)
+            set(Calendar.HOUR_OF_DAY, 23)
+            set(Calendar.MINUTE, 59)
+            set(Calendar.SECOND, 59)
+        }
+
+        // --- FECHA DE ENTREGA (a comparar) ---
+        val fechaEntregaCal = Calendar.getInstance().apply {
+            time = fechaEntregaDate
+        }
+
+        // La fecha de entrega debe ser posterior a hoy y no exceder el límite
+        fechaEntregaCal.after(hoy) && fechaEntregaCal.before(maximo)
+    } catch (e: Exception) {
+        false
     }
 }

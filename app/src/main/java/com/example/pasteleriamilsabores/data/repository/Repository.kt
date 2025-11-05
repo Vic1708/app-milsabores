@@ -3,6 +3,7 @@ package com.example.pasteleriamilsabores.data.repository
 import android.content.Context
 import com.example.pasteleriamilsabores.data.local.AppDatabase
 import com.example.pasteleriamilsabores.data.local.CartItemEntity
+import com.example.pasteleriamilsabores.data.local.OrderEntity
 import com.example.pasteleriamilsabores.data.local.ProductEntity
 import com.example.pasteleriamilsabores.data.local.UserEntity
 import kotlinx.coroutines.flow.Flow
@@ -75,6 +76,28 @@ class Repository(private val db: AppDatabase) : IRepository {
         db.cartDao().eliminarCartItem(item)
 
     override suspend fun limpiarCarrito() = db.cartDao().limpiarCarrito()
+
+    // -------------------------------
+    // 📦 SECCIÓN DE ÓRDENES
+    // -------------------------------
+
+    override suspend fun crearOrden(orden: OrderEntity): Long =
+        db.orderDao().insertOrder(orden)
+
+    override suspend fun obtenerOrdenPorNumero(orderNumber: String): OrderEntity? =
+        db.orderDao().getOrderByNumber(orderNumber)
+
+    override suspend fun obtenerOrdenReciente(): OrderEntity? =
+        db.orderDao().getLatestOrder()
+
+    override fun obtenerOrdenRecienteFlow(): Flow<OrderEntity?> =
+        db.orderDao().getLatestOrderFlow()
+
+    override suspend fun actualizarOrden(orden: OrderEntity) =
+        db.orderDao().updateOrder(orden)
+
+    override fun obtenerTodasLasOrdenes(): Flow<List<OrderEntity>> =
+        db.orderDao().getAllOrders()
 
     // -------------------------------
     // ☕ Singleton para obtener una instancia global

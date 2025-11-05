@@ -66,7 +66,9 @@ fun RegisterScreen(navController: NavController) {
             is RegisterResult.Success -> {
                 snackbarHostState.showSnackbar("Cuenta creada")
                 userViewModel.clearRegisterResult()
-                navController.navigate("login") { popUpTo("register") { inclusive = true } }
+                navController.navigate("auth/login") {
+                    popUpTo("auth/register") { inclusive = true }
+                }
             }
             is RegisterResult.AlreadyExists -> {
                 snackbarHostState.showSnackbar("La cuenta ya existe")
@@ -108,9 +110,11 @@ fun RegisterScreen(navController: NavController) {
                 value = nombre,
                 onValueChange = {
                     nombre = it
+                    val palabras = it.trim().split("\\s+".toRegex())
                     nombreError = when {
                         it.isBlank() -> "Ingresa tu nombre completo"
                         it.trim().length <= 3 -> "El nombre debe tener más de 3 caracteres"
+                        palabras.size < 2 -> "Ingresa nombre y apellido"
                         else -> null
                     }
                 },

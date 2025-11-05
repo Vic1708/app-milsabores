@@ -11,11 +11,12 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
 
 // Añadimos todas las entidades conocidas para que Room genere los DAOs correspondientes
-@Database(entities = [UserEntity::class, ProductEntity::class, CartItemEntity::class], version = 2)
+@Database(entities = [UserEntity::class, ProductEntity::class, CartItemEntity::class, OrderEntity::class], version = 3)
 abstract class AppDatabase: RoomDatabase() {
     abstract fun userDao(): UserDao
     abstract fun productDao(): ProductDao
     abstract fun cartDao(): CartDao
+    abstract fun orderDao(): OrderDao
 
     companion object {
         private const val PREPOPULATE = true // Prepopular la BD con los 15 productos del repositorio

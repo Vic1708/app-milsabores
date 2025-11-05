@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.pasteleriamilsabores.data.local.CartItemEntity
+import com.example.pasteleriamilsabores.data.local.OrderEntity
 import com.example.pasteleriamilsabores.data.repository.Repository
 import com.example.pasteleriamilsabores.model.Producto
 import kotlinx.coroutines.flow.SharingStarted
@@ -14,6 +15,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import com.example.pasteleriamilsabores.R
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * 🛒 CartViewModel
@@ -94,6 +98,56 @@ class CartViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun calcularTotal(): Double {
         return cartItems.value.sumOf { it.precio * it.quantity }
+    }
+
+    /**
+     * 📦 Crea un pedido con los datos del checkout
+     * Genera un número único para el pedido y retorna la orden creada
+     */
+    suspend fun createOrder(
+        direccion: String,
+        comuna: String,
+        fechaEntrega: String,
+        telefono: String
+    ): OrderEntity? {
+        return try {
+            val total = calcularTotal()
+
+            // Generar número único: PED-YYYYMMDD-XXXXX
+            val timestamp = SimpleDateFormat("yyyyMMdd", Locale("es", "CL")).format(Date())
+            val random = (10000..99999).random()
+            val orderNumber = "PED-$timestamp-$random"
+
+            val order = OrderEntity(
+                orderNumber = orderNumber,
+                estado = "Pendiente 📝",
+                total = total,
+                direccion = direccion,
+                comuna = comuna,
+                fechaEntrega = fechaEntrega,
+                telefono = telefono,
+                progreso = 0  // 0 = Pendiente
+            )
+
+            // Guardar la orden en BD
+            repository.crearOrden(order)
+
+            return order
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 📦 Obtiene la orden más reciente (pedido actual)
+     */
+    suspend fun obtenerOrdenReciente() = repository.obtenerOrdenReciente()
+
+    /**
+     * 🔄 Actualiza el estado de una orden
+     */
+    suspend fun actualizarOrden(order: OrderEntity) {
+        repository.actualizarOrden(order)
     }
 
     // -------------------------------

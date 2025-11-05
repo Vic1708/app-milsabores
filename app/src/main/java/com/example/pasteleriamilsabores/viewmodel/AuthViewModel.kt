@@ -6,12 +6,13 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.pasteleriamilsabores.data.local.UserEntity
 import com.example.pasteleriamilsabores.data.local.UserPreferences
+import com.example.pasteleriamilsabores.data.repository.UserRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class AuthViewModel(private val prefs: UserPreferences) : ViewModel() {
+class AuthViewModel(private val prefs: UserPreferences, private val userRepository: UserRepository) : ViewModel() {
 
     val usuario: StateFlow<UserEntity?> = prefs.obtenerUsuario
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -48,8 +49,32 @@ class AuthViewModel(private val prefs: UserPreferences) : ViewModel() {
         }
     }
 
+    /**
+     * Intenta hacer login validando contra Room Database (múltiples usuarios).
+     * Si es exitoso, guarda la sesión en DataStore.
+     */
     suspend fun intentarLogin(correo: String, password: String): Boolean {
-        return prefs.intentarLogin(correo, password)
+        return try {
+            // Buscar usuario en Room
+            val user = userRepository.login(correo, password)
+            if (user != null) {
+                // Guardar sesión en DataStore
+                prefs.guardarUsuario(
+                    nombre = user.nombre,
+                    correo = user.email,
+                    password = user.password,
+                    direccion = user.direccion,
+                    fechaNacimiento = user.fechaNacimiento,
+                    telefono = user.telefono,
+                    rut = user.rut
+                )
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            false
+        }
     }
 
     fun logout() {
@@ -60,7 +85,9 @@ class AuthViewModel(private val prefs: UserPreferences) : ViewModel() {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(AuthViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return AuthViewModel(UserPreferences(context)) as T
+                val prefs = UserPreferences(context)
+                val repository = UserRepository(context)
+                return AuthViewModel(prefs, repository) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

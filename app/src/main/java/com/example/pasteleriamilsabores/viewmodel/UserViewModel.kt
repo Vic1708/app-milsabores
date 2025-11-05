@@ -5,6 +5,7 @@ import android.util.Patterns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pasteleriamilsabores.data.local.UserEntity
+import com.example.pasteleriamilsabores.data.local.UserPreferences
 import com.example.pasteleriamilsabores.data.repository.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +20,7 @@ sealed class RegisterResult {
 class UserViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = UserRepository(application)
+    private val userPreferences = UserPreferences(application.applicationContext)
 
     private val _registerResult = MutableStateFlow<RegisterResult?>(null)
     val registerResult: StateFlow<RegisterResult?> = _registerResult
@@ -43,9 +45,10 @@ class UserViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        // nombre completo: debe tener más de 3 caracteres
-        if (nombre.trim().length <= 3) {
-            _registerResult.value = RegisterResult.Error("El nombre debe tener más de 3 caracteres")
+        // Nombre completo: debe tener nombre Y apellido (al menos 2 palabras) y más de 3 caracteres
+        val palabras = nombre.trim().split("\\s+".toRegex())
+        if (nombre.trim().length <= 3 || palabras.size < 2) {
+            _registerResult.value = RegisterResult.Error("Ingresa nombre y apellido (mínimo 3 caracteres)")
             return
         }
 
@@ -76,23 +79,37 @@ class UserViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        // Si valida, guardar en Room (suspend en coroutine)
+        // Si valida, guardar en Room y DataStore
         viewModelScope.launch {
-            val user = UserEntity(
-                nombre = nombre,
-                email = email,
-                password = password,
-                fechaNacimiento = fechaNacimiento,
-                direccion = direccion,
-                telefono = telefono,
-                rut = rut
-            )
+            try {
+                val user = UserEntity(
+                    nombre = nombre,
+                    email = email,
+                    password = password,
+                    fechaNacimiento = fechaNacimiento,
+                    direccion = direccion,
+                    telefono = telefono,
+                    rut = rut
+                )
 
-            val id = repository.register(user)
-            if (id == -1L) {
-                _registerResult.value = RegisterResult.AlreadyExists
-            } else {
-                _registerResult.value = RegisterResult.Success
+                val id = repository.register(user)
+                if (id == -1L) {
+                    _registerResult.value = RegisterResult.AlreadyExists
+                } else {
+                    // Guardar también en DataStore para compatibilidad
+                    userPreferences.guardarUsuario(
+                        nombre = nombre,
+                        correo = email,
+                        password = password,
+                        direccion = direccion,
+                        fechaNacimiento = fechaNacimiento,
+                        telefono = telefono,
+                        rut = rut
+                    )
+                    _registerResult.value = RegisterResult.Success
+                }
+            } catch (e: Exception) {
+                _registerResult.value = RegisterResult.Error("Error al registrar: ${e.message}")
             }
         }
     }

@@ -15,13 +15,21 @@ class UserRepository(context: Context) {
 
     private val userDao = db.userDao()
 
+    /**
+     * Intenta registrar un nuevo usuario.
+     * Retorna el ID si fue exitoso, -1L si el email ya existe.
+     */
     suspend fun register(user: UserEntity): Long {
-        // comprobar si email ya existe
+        // Comprobar si email ya existe
         val existing = userDao.getByEmail(user.email)
-        if (existing != null) return -1
+        if (existing != null) return -1L
         return userDao.insert(user)
     }
 
+    /**
+     * Intenta hacer login con email y password.
+     * Retorna el usuario si las credenciales son correctas, null si no.
+     */
     suspend fun login(email: String, password: String): UserEntity? {
         val user = userDao.getByEmail(email) ?: return null
         return if (user.password == password) user else null
